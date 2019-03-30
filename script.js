@@ -3,14 +3,15 @@ var canvas;
 var w = 5.5, h = 11; // original CMG version is 5.5,11
 var tileW = 64, tileH = 48;
 var mx = 0, my = 0, minmx = 0, minmy = 0;
-var prob = .6;
+var prob = .2;
 var animSpeed = 5;
 var margin = 32;
 var canvasW = w * tileW + 2*margin, canvasH = h * tileH + (tileW-tileH) + 2*margin;
 var pigY, pigX; // real coords
 var pigYA, pigXA; // animated coords
 var pigThinking = false;
-var plm = -2; // pig's last move
+var pigspr = "confused";
+var plm = -2;
 var grid = {};
 
 var images = {};
@@ -29,14 +30,15 @@ window.onload = function() {
 };
 
 function resetTiles(){
-	for (var y = 0; y < h; y++) for (var x = (y%2)/2; x+1 <= w; x++)
-		setGrid(grid,y,x,Math.random()<prob);
+	pigspr = "confused";
+	for (var y = 0; y < h; y++) for (var x = (y%2)/2; x+1 <= w; x++) setGrid(grid,y,x,Math.random()<prob);
 
 	pigY = (h-1)/2;
 	pigX = Math.ceil(w)/2-.5;
 	setGrid(grid,pigY,pigX,false);
 	pigYA = canvasH/2;
 	pigXA = canvasW/2;
+	console.log("\n\n\n\n\n");
 }
 
 function renderGrid(){
@@ -44,7 +46,7 @@ function renderGrid(){
 	document.getElementById("solved").innerHTML = "<h1>"+(isPigSurrounded()?"Solved!":"Good Luck!")+"</h1>";
 	if(pigX>w-1||pigX<0||pigY>h-1||pigY<0) document.getElementById("solved").innerHTML = "<h1>You Lose!</h1>";
 
-	ctx.fillStyle = "cyan";
+	ctx.fillStyle = "#bbffff";
 	ctx.fillRect(0,0,canvasW,canvasH);
 
 	ctx.save();
@@ -66,7 +68,7 @@ function renderGrid(){
 	//draw pig
 	pigXA = (animSpeed*pigXA+pigX*tileW)/(animSpeed+1);
 	pigYA = (animSpeed*pigYA+pigY*tileH)/(animSpeed+1);
-	drawTile(pigXA,pigYA,"pig");
+	drawTile(pigXA,pigYA,pigspr);
 
 	//draw mouse
 	if(!(minmx == pigX && minmy == pigY) && getGrid(grid,minmy,minmx) == false) drawTile(tileW*minmx,tileH*minmy,"mouse");
@@ -102,7 +104,7 @@ function onClick(event) {
 }
 
 function isPigSurrounded() {
-	return plm == -1;
+	return plm == -2
 }
 
 function square(x){
@@ -122,72 +124,106 @@ function square(x){
 
 //Recursive solver
 function pigMove(){
+	pigspr = "happy";
 	pigThinking = true;
-	plm = -2;
 
-	//check if only one move
-	var moves = 0;
-	var last = -1;
-	for(var dir = 0; dir < 6; dir++){
-		if(getGrid(grid,pigY+dirY(dir),pigX+dirX(dir)) == true)continue;
-		moves++;
-		last = dir;
-	}
-	if(moves<2){
-		plm = last;
-		if(plm != -1){
-			pigY += dirY(plm);
-			pigX += dirX(plm);
-		}
-		return;
-	}
+	plm = bestPigDirNow();
 
-	//initial pruning flood
-	if(plm == -2){
-		var child = {};
-		Object.keys(grid).forEach(function(key) { child[ key ] = grid[ key ]; });
-		child[pigY+" "+pigX]=5;
-		var edits = 1;
-		while(edits>0){
-			edits = 0;
-			for(var s in child) if(child[s] == false) for(var dir = 0; dir < 6; dir++){
-				var nY = strtoy(s)+dirY(dir), nX = strtox(s)+dirX(dir);
-				if(getGrid(child,nY,nX) == 5){child[s]=5;edits++;break;}
-			}
-		}
-		for(var s in child){
-			if(child[s] == 5) child[s] = false;
-			else child[s] = true;
-		}
-	}
-
-	if(plm == -2) plm = pigMoveR(child,pigY,pigX);
-
-	if(plm < 0) plm = last;
+	if(plm < 0)return;
 	pigY += dirY(plm);
 	pigX += dirX(plm);
 }
-function pigMoveR(parent,pY,pX){
+
+function bestPigDirNow(){
+	plm = -2;
+
+	//initial pruning flood
+	var child = {};
+	Object.keys(grid).forEach(function(key) { child[ key ] = grid[ key ]; });
+	child[pigY+" "+pigX]=5;
+	var edits = 1;
+	while(edits>0){
+		edits = 0;
+		for(var s in child) if(child[s] == false) for(var dir = 0; dir < 6; dir++){
+			var nY = strtoy(s)+dirY(dir), nX = strtox(s)+dirX(dir);
+			if(getGrid(child,nY,nX) == 5){
+				child[s]=5;
+				edits++;
+			}
+		}
+	}
+	for(var s in child) child[s] = child[s] != 5;
+
+	for(var dir = 0; dir < 6; dir++){
+		var nX = pigX + dirX(dir), nY = pigY + dirY(dir);
+		if(getGrid(grid,nY,nX) == true) continue;
+		if(isOutside(nY,nX)){
+			console.log(dir+" is a way out");
+			return dir;
+		}
+	}
+	for(var dir = 0; dir < 6; dir++){
+		var nX = pigX + dirX(dir), nY = pigY + dirY(dir);
+		if(getGrid(grid,nY,nX) == true) continue;
+		if(isEdge(nY,nX)){
+			console.log(dir+" is an edge");
+			return dir;
+		}
+	}
+	for(var d = 0; d < 8; d+=2){
+		for(var dir = 0; dir < 6; dir++){
+			var nX = pigX + dirX(dir), nY = pigY + dirY(dir);
+			if(getGrid(grid,nY,nX) == true) continue;
+			if(!humanCanBlock(child,nY,nX,d)){
+				console.log(dir+" is a searched route");
+				return dir;
+			}
+		}
+	}
+
+	pigspr = "confused";
+	for(var dir = 0; dir < 6; dir++) if(!getGrid(grid,pigY+dirY(dir),pigX+dirX(dir)) == true) return dir;
+
+	return -2;
+}
+
+function pigCanEscape(parent,pY,pX,depth){ //returns true if the pig can make it out. Context: pig's turn.
+	var borders = 0;
+	for(var dir = 0; dir < 6; dir++) if((isEdge(pY+dirY(dir), pX+dirX(dir)) || isOutside(pY+dirY(dir), pX+dirX(dir))) && getGrid(parent,pY+dirY(dir),pX+dirX(dir)) != true)return true;
+	
+	if(depth == 0){
+		Console.log("bottomed");
+		return false;
+	}
+
 	for(var dir = 0; dir < 6; dir++){
 		var nY = pY+dirY(dir), nX = pX+dirX(dir);
-		if(getGrid(parent,nY,nX) == true)continue;
+		if(getGrid(parent,nY,nX) != false)continue;
 		var child = {};
 		Object.keys(parent).forEach(function(key) { child[ key ] = parent[ key ]; });
 		setGrid(child,pY,pX,true);
-		if(humanMoveR(child,nY,nX)==1)return dir;
+		if(!humanCanBlock(child,nY,nX,depth-1))return true;
 	}
-	return -1;
+	return false;
 }
-function humanMoveR(parent,pY,pX){
-	if(pX>w-1||pX<0||pY>h-1||pY<0) return -1;
+function humanCanBlock(parent,pY,pX,depth){ //returns true if the pig can be blocked. Context: human's turn.
+	if(depth == 0) return true;
 	for(var s in parent){
-		if(parent[s])continue;
+		if(parent[s] == true)continue;
 		var child = {};
 		Object.keys(parent).forEach(function(key) { child[ key ] = parent[ key ]; });
 		child[s] = true;
-		if(pigMoveR(child,pY,pX)==-1)return 1;
+		if(!pigCanEscape(child,pY,pX, depth-1))return true;
 	}
-	return -1;
+	return false;
+}
+
+function isOutside(y,x){
+	return x > w-1 || x < 0 || y >= h || y < 0;
+}
+
+function isEdge(y,x){
+	return x > w || x < 1 || y >= h-1 || y < 1;
 }
 
 function dirX(dir){ return (((Math.floor(dir/2)%3-1)==0)+1)*(dir%2-.5); }
