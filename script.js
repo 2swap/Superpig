@@ -4,15 +4,16 @@ var w = 5.5, h = 11; // original CMG version is 5.5,11
 var tileW = 64, tileH = 48;
 var mx = 0, my = 0, minmx = 0, minmy = 0;
 var prob = .2;
+var totalStones = 9;
 var animSpeed = 5;
 var margin = 32;
 var canvasW = w * tileW + 2*margin, canvasH = h * tileH + (tileW-tileH) + 2*margin;
 var pigY, pigX; // real coords
 var pigYA, pigXA; // animated coords
-var pigThinking = false;
 var pigspr = "confused";
-var plm = -2;
+var plm = -1;
 var grid = {};
+var humanMoves = 3;
 
 var images = {};
 
@@ -30,21 +31,31 @@ window.onload = function() {
 };
 
 function resetTiles(){
-	pigspr = "confused";
-	for (var y = 0; y < h; y++) for (var x = (y%2)/2; x+1 <= w; x++) setGrid(grid,y,x,Math.random()<prob);
-
+	humanMoves = 3;
+	pigspr = "surprised";
 	pigY = (h-1)/2;
 	pigX = Math.ceil(w)/2-.5;
-	setGrid(grid,pigY,pigX,false);
 	pigYA = canvasH/2;
 	pigXA = canvasW/2;
+
+	var total = 0, stonesLeft = totalStones;
+	for (var y = 0; y < h; y++) for (var x = (y%2)/2; x+1 <= w; x++) if(x != pigX || y != pigY) total++;
+	for (var y = 0; y < h; y++) for (var x = (y%2)/2; x+1 <= w; x++){
+		var prb = Math.random()<stonesLeft/total;
+		prb &= !(x == pigX && y == pigY);
+		setGrid(grid,y,x,prb);
+		total-=(x != pigX || y != pigY)?1:0;
+		stonesLeft-=prb?1:0;
+	}
+
 	console.log("\n\n\n\n\n");
 }
 
 function renderGrid(){
-	document.getElementById("mines").innerHTML = "<h1>"+(pigThinking?"Pig is thinking...":"Click to place a stone!")+"<h1>";
-	document.getElementById("solved").innerHTML = "<h1>"+(isPigSurrounded()?"Solved!":"Good Luck!")+"</h1>";
-	if(pigX>w-1||pigX<0||pigY>h-1||pigY<0) document.getElementById("solved").innerHTML = "<h1>You Lose!</h1>";
+	var inside = "Click to place "+humanMoves+" stone"+(humanMoves>1?"s":"")+"!";
+	if(plm == -3) inside = "Solved!";
+	if(pigX>w-1||pigX<0||pigY>h-1||pigY<0) inside = "You Lose!";
+	document.getElementById("mines").innerHTML = "<h1>"+inside+"</h1>";
 
 	ctx.fillStyle = "#bbffff";
 	ctx.fillRect(0,0,canvasW,canvasH);
@@ -71,7 +82,7 @@ function renderGrid(){
 	drawTile(pigXA,pigYA,pigspr);
 
 	//draw mouse
-	if(!(minmx == pigX && minmy == pigY) && getGrid(grid,minmy,minmx) == false) drawTile(tileW*minmx,tileH*minmy,"mouse");
+	if(!(minmx == pigX && minmy == pigY) && getGrid(grid,minmy,minmx) == false && humanMoves > 0) drawTile(tileW*minmx,tileH*minmy,"mouse");
 
 	ctx.restore();
 }
@@ -95,16 +106,34 @@ function onMouseMove(event) {
     my = event.clientY - rect.top - margin;
 }
 function onClick(event) {
-	if(pigThinking) return;
+	if(humanMoves == 0) {bestPigDir(); return;}
 	if(minmx == pigX && minmy == pigY) return;
 	if(getGrid(grid,minmy,minmx) == true) return;
 	setGrid(grid,minmy,minmx,true);
-	pigMove();
-	pigThinking = false;
+	humanMoves--;
+	if(isPigSurrounded()) return;
+	if(humanMoves == 0) pigMove();
 }
 
 function isPigSurrounded() {
-	return plm == -2
+	var child = {};
+	Object.keys(grid).forEach(function(key) { child[ key ] = grid[ key ]; });
+	child[pigY+" "+pigX]=5;
+	var edits = 1;
+	while(edits>0){
+		edits = 0;
+		for(var s in child) if(child[s] == 5) for(var dir = 0; dir < 6; dir++){
+			var nY = strtoy(s)+dirY(dir), nX = strtox(s)+dirX(dir);
+			if(getGrid(child,nY,nX) == true) continue;
+			if(typeof getGrid(child,nY,nX) === "undefined") if(isOutside(nY,nX)) return false;
+			if(getGrid(child,nY,nX) != 5){
+				setGrid(child,nY,nX,5);
+				edits++;
+			}
+		}
+	}
+	plm = -3;
+	return true;
 }
 
 function square(x){
@@ -124,14 +153,15 @@ function square(x){
 
 //Recursive solver
 function pigMove(){
+	document.getElementById("mines").innerHTML = "<h1>Pig is thinking...</h1>";
 	pigspr = "happy";
-	pigThinking = true;
 
 	plm = bestPigDirNow();
 
 	if(plm < 0)return;
 	pigY += dirY(plm);
 	pigX += dirX(plm);
+	humanMoves++;
 }
 
 function bestPigDirNow(){
@@ -170,7 +200,7 @@ function bestPigDirNow(){
 			return dir;
 		}
 	}
-	for(var d = 0; d < 8; d+=2){
+	for(var d = 0; d < 9; d+=2){
 		for(var dir = 0; dir < 6; dir++){
 			var nX = pigX + dirX(dir), nY = pigY + dirY(dir);
 			if(getGrid(grid,nY,nX) == true) continue;
@@ -191,10 +221,7 @@ function pigCanEscape(parent,pY,pX,depth){ //returns true if the pig can make it
 	var borders = 0;
 	for(var dir = 0; dir < 6; dir++) if((isEdge(pY+dirY(dir), pX+dirX(dir)) || isOutside(pY+dirY(dir), pX+dirX(dir))) && getGrid(parent,pY+dirY(dir),pX+dirX(dir)) != true)return true;
 	
-	if(depth == 0){
-		Console.log("bottomed");
-		return false;
-	}
+	if(depth == 0) return false;
 
 	for(var dir = 0; dir < 6; dir++){
 		var nY = pY+dirY(dir), nX = pX+dirX(dir);
