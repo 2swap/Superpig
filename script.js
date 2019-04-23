@@ -136,9 +136,7 @@ function isPigSurrounded() {
 	return true;
 }
 
-function square(x){
-	return x*x;
-}
+function square(x){ return x*x; }
 
 
 
@@ -245,20 +243,9 @@ function humanCanBlock(parent,pY,pX,depth){ //returns true if the pig can be blo
 	return false;
 }
 
-function isOutside(y,x){
-	return x > w-1 || x < 0 || y >= h || y < 0;
-}
-
-function isEdge(y,x){
-	return x > w || x < 1 || y >= h-1 || y < 1;
-}
-
+function isOutside(y,x){ return x > w-1 || x < 0 || y >= h || y < 0; }
+function isEdge(y,x){ return x > w || x < 1 || y >= h-1 || y < 1; }
 function dirX(dir){ return (((Math.floor(dir/2)%3-1)==0)+1)*(dir%2-.5); }
 function dirY(dir){ return Math.floor(dir/2)%3-1; }
-
-function strtoy(s){
-	return parseInt(s.split(" ")[0]);
-}
-function strtox(s){
-	return parseFloat(s.split(" ")[1]);
-}
+function strtoy(s){ return parseInt(s.split(" ")[0]); }
+function strtox(s){ return parseFloat(s.split(" ")[1]); }
